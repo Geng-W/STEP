@@ -29,7 +29,6 @@ class IntervalDataFactory:
 def parse_label_timestamp(timestamp_str):
     return datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%SZ")
 
-
 def add_labels_to_csv(csv_file, txt_file, output_file, label_prefix):
     labels = {}
     with open(txt_file, 'r') as f:
@@ -52,17 +51,13 @@ def add_labels_to_csv(csv_file, txt_file, output_file, label_prefix):
                 label = labels[timestamp]
                 writer.writerow([label] + row)
             else:
-
                 writer.writerow([""] + row)
-
 
 def parse_timestamp(timestamp_str):
     return datetime.strptime(timestamp_str, "%d/%b/%Y:%H:%M:%S")
 
-
 def format_timestamp(timestamp):
     return timestamp.strftime("%d/%b/%Y:%H:%M:%S")
-
 
 def calculate_entropy(values):
     if len(values) == 0:
@@ -72,23 +67,18 @@ def calculate_entropy(values):
     probs = counts / counts.sum()
     return -np.sum(probs * np.log2(probs))
 
-
 def process_file(file_path, start_time, end_time, active_window_length, use_intermediate_files=True):
-
     if use_intermediate_files:
         import hashlib
         file_hash = hashlib.md5(file_path.encode()).hexdigest()
         intermediate_dir = os.path.join(os.path.dirname(file_path), 'temp_intermediate')
         os.makedirs(intermediate_dir, exist_ok=True)
-
         output_path = os.path.join(intermediate_dir, f'{file_hash}_win{active_window_length}.pkl')
-
-
         if os.path.exists(output_path):
             try:
                 return load_intermediate_data(output_path)
             except:
-                print(f"reload {file_path}，because intermediate file is corrupted")
+                print(f"Failed to load intermediate file, reloading {file_path}")
 
     else:
         output_path = None
@@ -125,12 +115,10 @@ def process_file(file_path, start_time, end_time, active_window_length, use_inte
         save_intermediate_data(dict(local_data), output_path)
     return dict(local_data)
 
-
 def save_intermediate_data(data_dict, file_path):
     import pickle
     with open(file_path, 'wb') as f:
         pickle.dump(data_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
-
 
 def load_intermediate_data(file_path):
     import pickle
@@ -139,15 +127,13 @@ def load_intermediate_data(file_path):
             data_dict = pickle.load(f)
         return data_dict
     except (EOFError, pickle.UnpicklingError, Exception) as e:
-        print(f"Loading intermediate file {file_path} failed，will delete the corrupted file. Error message: {str(e)}")
+        print(f"Loading intermediate file {file_path} failed, will delete the corrupted file. Error message: {str(e)}")
         import os
         os.remove(file_path)
         raise
 
-
 def calculate_g_values(data_dict, total_counts, g_history_length, active_window_length, sorted_intervals):
     g_data = {}
-
     for interval_start in sorted_intervals:
         prev_counts = []
         current_interval = interval_start
@@ -159,7 +145,6 @@ def calculate_g_values(data_dict, total_counts, g_history_length, active_window_
     if sorted_intervals:
         sample_g_values = g_data[sorted_intervals[0]]
         col_means = []
-
         for col_idx in range(len(sample_g_values)):
             values = [g_data[interval][col_idx] for interval in sorted_intervals]
             non_zero = [v for v in values if v != 0]
@@ -172,7 +157,6 @@ def calculate_g_values(data_dict, total_counts, g_history_length, active_window_
                     g_data[interval_start][i] = col_means[i]
 
     return g_data
-
 
 def process_csv_files(input_folders, output_file, enabled_groups, g_history_length, active_window_length=3,
                       use_intermediate_files=True,
@@ -204,13 +188,12 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
                     existing_metadata.get(k) == v
                     for k, v in current_metadata_without_headers.items()
                 )
-
                 if metadata_match:
                     data_dict = loaded_data['data']
                     headers_list = existing_metadata.get('headers_list', [])
-                    print("intermediate file useable")
+                    print("Intermediate file usable")
                 else:
-                    print("intermediate file unusable")
+                    print("Intermediate file unusable")
                     os.remove(intermediate_file)
                     data_dict = None
             else:
@@ -238,7 +221,7 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
             invalid_files = [f for f in folder_files if
                              not any(os.path.commonpath([f, in_folder]) == in_folder for in_folder in input_folders)]
             if invalid_files:
-                print(f"warning: {invalid_files}")
+                print(f"Warning: {invalid_files}")
 
         if files:
             with open(files[0], 'r') as f:
@@ -265,7 +248,6 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
                     new_counts = np.pad(new_counts, (0, len(current_counts) - len(new_counts)), 'constant')
                 data_dict[interval]['counts_10s'] = current_counts + new_counts
                 for col, values in data['column_data'].items():
-
                     data_dict[interval]['column_data'][col] = np.concatenate(
                         (data_dict[interval]['column_data'][col], values)
                     )
@@ -362,7 +344,7 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
                             if std_val == 0 or len(values) < 3:
                                 skew_val = 0.0
                             else:
-                                skew_val = skew(values, bias=False)  # 使用无偏估计
+                                skew_val = skew(values, bias=False)
                         else:
                             median, variance, skew_val = 0, 0, 0
                         row.extend([median, variance, skew_val])
@@ -400,11 +382,11 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
                 prefix + base_name
             )
             add_labels_to_csv(output_file, txt_file, labeled_output_file, prefix.rstrip('_'))
-            print(f"created: {labeled_output_file}")
+            print(f"Created: {labeled_output_file}")
 
 if __name__ == "__main__":
-    input_folders = [""]
-    output_file = ""
+    input_folders = ["/path/to/input/folder"]
+    output_file = "/path/to/output/file.csv"
     enabled_groups = {'A', 'C', 'D', 'G','H'}
     txt_label_file1 = "./labels_first_frame_time.txt"
     txt_label_file2 = "./labels_video_render_stall_time.txt"
