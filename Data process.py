@@ -387,10 +387,10 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
         print(f"Created: {labeled_output_file}")
 
 if __name__ == "__main__":
-    input_folders = [r"D:\Study\QoE_QoS2\论文写作\实验程序\上传github\数据集\QoS"]
-    output_file = r"D:\Study\QoE_QoS2\论文写作\实验程序\上传github\数据集\output\file.csv"
+    input_folders = [r".\QoS"]
+    output_file = r".\file.csv"
     enabled_groups = {'A', 'C', 'D', 'G','H'}
-    csv_label_file = r"D:\Study\QoE_QoS2\论文写作\实验程序\上传github\数据集\QoE.csv"
+    csv_label_file = r".\QoE.csv"
     intermediate_dir = r"./intermediate"
     process_csv_files(
         input_folders,
