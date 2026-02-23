@@ -26,32 +26,42 @@ class IntervalDataFactory:
             'column_data': defaultdict(column_data_factory)
         }
 
-def parse_label_timestamp(timestamp_str):
-    return datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%SZ")
+def add_labels_from_csv(csv_file, csv_label_file, output_file):
+    import pandas as pd
+    label_df = pd.read_csv(csv_label_file)
+    label_mapping = {}
+    for _, row in label_df.iterrows():
+        timestamp_str = row['Interval Start']
+        timestamp = parse_timestamp(timestamp_str)
+        label_mapping[timestamp] = {
+            'first_frame_delay': row['First Frame Delay'],
+            'buffer_empty_duration': row['Buffer Empty Duration'],
+            'stall_duration': row['Stall Duration']
+        }
 
-def add_labels_to_csv(csv_file, txt_file, output_file, label_prefix):
-    labels = {}
-    with open(txt_file, 'r') as f:
-        for line in f:
-            timestamp_str, label = line.strip().split()
-            timestamp = parse_label_timestamp(timestamp_str)
-            labels[timestamp] = float(label)
-
-    with open(csv_file, 'r') as csvfile, open(output_file, 'w', newline='') as outfile:
-        reader = csv.reader(csvfile)
+    with open(csv_file, 'r') as infile, open(output_file, 'w', newline='') as outfile:
+        reader = csv.reader(infile)
         writer = csv.writer(outfile)
 
         headers = next(reader)
-        writer.writerow([f"{label_prefix}_Label"] + headers)
+        new_headers = ['label1_First_Frame_Delay', 'label2_Buffer_Empty_Duration', 'label3_Stall_Duration'] + headers
+        writer.writerow(new_headers)
 
         for row in reader:
             timestamp_str = row[0]
             timestamp = parse_timestamp(timestamp_str)
-            if timestamp in labels:
-                label = labels[timestamp]
-                writer.writerow([label] + row)
+
+            if timestamp in label_mapping:
+                labels = label_mapping[timestamp]
+                label_row = [
+                    labels['first_frame_delay'],
+                    labels['buffer_empty_duration'],
+                    labels['stall_duration']
+                ]
             else:
-                writer.writerow([""] + row)
+                label_row = ['', '', '']
+
+            writer.writerow(label_row + row)
 
 def parse_timestamp(timestamp_str):
     return datetime.strptime(timestamp_str, "%d/%b/%Y:%H:%M:%S")
@@ -89,7 +99,7 @@ def process_file(file_path, start_time, end_time, active_window_length, use_inte
         reader = csv.reader(f)
         next(reader)
         for row in reader:
-            timestamp_str = row[29]
+            timestamp_str = row[0]
             timestamp = parse_timestamp(timestamp_str)
             if start_time <= timestamp <= end_time:
                 interval_start = timestamp.replace(
@@ -103,7 +113,7 @@ def process_file(file_path, start_time, end_time, active_window_length, use_inte
                     if second_index < active_window_length // 10:
                         local_data[interval_start]['counts_10s'][second_index] += 1
                         for i in range(31):
-                            if i not in (27, 29):
+                            if i not in (0, 3):
                                 try:
                                     value = float(row[i])
                                     local_data[interval_start]['column_data'][i] = np.append(
@@ -160,7 +170,7 @@ def calculate_g_values(data_dict, total_counts, g_history_length, active_window_
 
 def process_csv_files(input_folders, output_file, enabled_groups, g_history_length, active_window_length=3,
                       use_intermediate_files=True,
-                      txt_label_file1=None, txt_label_file2=None, txt_label_file3=None, intermediate_dir=None):
+                      csv_label_file=None, intermediate_dir=None):
     start_time = parse_timestamp("01/Jan/2024:00:00:00")
     end_time = parse_timestamp("31/Dec/2025:23:59:59")
     if intermediate_dir:
@@ -230,7 +240,7 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
         else:
             headers_list = []
 
-        with Pool(processes=32) as pool:
+        with Pool(processes=31) as pool:
             results = pool.starmap(process_file,
                                    [(f, start_time, end_time, active_window_length, use_intermediate_files) for f in
                                     files])
@@ -281,22 +291,22 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
             output_headers.extend([f"10s_{i}" for i in range(active_window_length // 10)])
         if 'C' in enabled_groups:
             for i in range(31):
-                if i not in (27, 29):
+                if i >=3:
                     col_name = headers_list[i]
                     output_headers.append(f"Mean_{col_name}")
         if 'D' in enabled_groups:
             for i in range(31):
-                if i not in (27, 29):
+                if i >=3:
                     col_name = headers_list[i]
                     output_headers.extend([f"Median_{col_name}", f"Variance_{col_name}", f"Skew_{col_name}"])
         if 'E' in enabled_groups:
             for i in range(31):
-                if i not in (27, 29):
+                if i >=3:
                     col_name = headers_list[i]
                     output_headers.append(f"Entropy_{col_name}")
         if 'F' in enabled_groups:
             for i in range(31):
-                if i not in (27, 29):
+                if i >=3:
                     col_name = headers_list[i]
                     for j in range(1, 6):
                         output_headers.append(f"Max{j}_{col_name}")
@@ -329,13 +339,13 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
                 row.extend(counts_data[:active_window_length // 10])
             if 'C' in enabled_groups:
                 for i in range(31):
-                    if i not in (27, 29):
+                    if i >=3:
                         values = data_dict[interval_start]['column_data'][i]
                         avg = np.mean(values) if len(values) else 0.0
                         row.append(avg)
             if 'D' in enabled_groups:
                 for i in range(31):
-                    if i not in (27, 29):
+                    if i >=3:
                         values = data_dict[interval_start]['column_data'][i]
                         if len(values):
                             median = np.median(values)
@@ -350,12 +360,12 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
                         row.extend([median, variance, skew_val])
             if 'E' in enabled_groups:
                 for i in range(31):
-                    if i not in (27, 29):
+                    if i >=3:
                         values = data_dict[interval_start]['column_data'][i]
                         row.append(calculate_entropy(values) if len(values) > 0 else 0.0)
             if 'F' in enabled_groups:
                 for i in range(31):
-                    if i not in (27, 29):
+                    if i >=3:
                         values = data_dict[interval_start]['column_data'][i]
                         sorted_vals = np.sort(values)[-5:] if len(values) else np.array([])
                         sorted_vals = np.pad(sorted_vals, (0, 5 - len(sorted_vals)), 'constant', constant_values=0)
@@ -367,31 +377,21 @@ def process_csv_files(input_folders, output_file, enabled_groups, g_history_leng
                 time_of_day_sec = interval_start.hour * 3600 + interval_start.minute * 60 + interval_start.second
                 row.append(time_of_day_sec)
             writer.writerow(row)
-
-    label_files = [
-        (txt_label_file1, "label1_"),
-        (txt_label_file2, "label2_"),
-        (txt_label_file3, "label3_")
-    ]
-
-    for txt_file, prefix in label_files:
-        if txt_file and os.path.exists(txt_file):
-            base_name = os.path.basename(output_file)
-            labeled_output_file = os.path.join(
-                os.path.dirname(output_file),
-                prefix + base_name
-            )
-            add_labels_to_csv(output_file, txt_file, labeled_output_file, prefix.rstrip('_'))
-            print(f"Created: {labeled_output_file}")
+    if csv_label_file and os.path.exists(csv_label_file):
+        base_name = os.path.basename(output_file)
+        labeled_output_file = os.path.join(
+            os.path.dirname(output_file),
+            'labeled_' + base_name
+        )
+        add_labels_from_csv(output_file, csv_label_file, labeled_output_file)
+        print(f"Created: {labeled_output_file}")
 
 if __name__ == "__main__":
-    input_folders = ["/path/to/input/folder"]
-    output_file = "/path/to/output/file.csv"
+    input_folders = [r"D:\Study\QoE_QoS2\论文写作\实验程序\上传github\数据集\QoS"]
+    output_file = r"D:\Study\QoE_QoS2\论文写作\实验程序\上传github\数据集\output\file.csv"
     enabled_groups = {'A', 'C', 'D', 'G','H'}
-    txt_label_file1 = "./labels_first_frame_time.txt"
-    txt_label_file2 = "./labels_video_render_stall_time.txt"
-    txt_label_file3 = "./labels_play_stall_time.txt"
-    intermediate_dir = "./intermediate"
+    csv_label_file = r"D:\Study\QoE_QoS2\论文写作\实验程序\上传github\数据集\QoE.csv"
+    intermediate_dir = r"./intermediate"
     process_csv_files(
         input_folders,
         output_file,
@@ -399,8 +399,6 @@ if __name__ == "__main__":
         g_history_length=10,
         active_window_length=60,
         use_intermediate_files=False,
-        txt_label_file1=txt_label_file1,
-        txt_label_file2=txt_label_file2,
-        txt_label_file3=txt_label_file3,
+        csv_label_file=csv_label_file,
         intermediate_dir=intermediate_dir
     )
